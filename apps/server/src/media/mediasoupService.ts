@@ -83,6 +83,7 @@ interface Worker extends EventedCloseable {
 interface RoomProducerRecord {
   producer: Producer;
   participantId: string;
+  transportId: string;
   kind: MediaKind;
   source: MediaSource;
 }
@@ -90,11 +91,18 @@ interface RoomProducerRecord {
 interface RoomConsumerRecord {
   consumer: Consumer;
   producerId: string;
+  participantId: string;
+  transportId: string;
+}
+
+interface RoomTransportRecord {
+  transport: WebRtcTransport;
+  participantId: string;
 }
 
 export interface RoomMediaState {
   router: Router;
-  transports: Map<string, WebRtcTransport>;
+  transports: Map<string, RoomTransportRecord>;
   producers: Map<string, RoomProducerRecord>;
   consumers: Map<string, RoomConsumerRecord>;
 }
@@ -104,7 +112,7 @@ export interface RoomMediaController {
   stop(): Promise<void>;
   getOrCreateRoom(roomId: RoomId): Promise<RoomMediaState>;
   getRouterRtpCapabilities(roomId: RoomId): Promise<unknown>;
-  createTransport(roomId: RoomId, direction: 'send' | 'recv'): Promise<WebRtcTransport | undefined>;
+  createTransport(roomId: RoomId, participantId: string, direction: 'send' | 'recv'): Promise<WebRtcTransport | undefined>;
   connectTransport(roomId: RoomId, transportId: string, dtlsParameters: unknown): Promise<boolean>;
   produce(
     roomId: RoomId,
@@ -120,7 +128,8 @@ export interface RoomMediaController {
     producerId: string,
     rtpCapabilities: unknown
   ): Promise<{ id: string; producerId: string; kind: MediaKind; rtpParameters: unknown } | undefined>;
-  closeProducer(roomId: RoomId, producerId: string): Promise<PublishedTrack | undefined>;
+  closeProducer(roomId: RoomId, participantId: string, producerId: string): Promise<PublishedTrack | undefined>;
+  closeParticipant(roomId: RoomId, participantId: string): Promise<PublishedTrack[]>;
   closeRoom(roomId: RoomId): Promise<void>;
 }
 
@@ -189,13 +198,19 @@ export class MediasoupService implements RoomMediaController {
   private worker: Worker | undefined;
   private readonly rooms = new Map<RoomId, RoomMediaState>();
 
-  constructor(private readonly config: MediasoupRuntimeConfig = parseMediasoupConfig()) {}
+  constructor(
+    private readonly config: MediasoupRuntimeConfig = parseMediasoupConfig(),
+    private readonly dependencies: { createWorker?: (config: { rtcMinPort: number; rtcMaxPort: number }) => Promise<Worker> } = {}
+  ) {}
 
   async start(): Promise<void> {
     if (this.worker) return;
 
-    const mediasoup = await import('mediasoup');
-    const createWorker = (mediasoup as any).createWorker ?? (mediasoup as any).default?.createWorker;
+    let createWorker = this.dependencies.createWorker;
+    if (!createWorker) {
+      const mediasoup = await import('mediasoup');
+      createWorker = (mediasoup as any).createWorker ?? (mediasoup as any).default?.createWorker;
+    }
     if (typeof createWorker !== 'function') {
       throw createMediaRuntimeError('mediasoup createWorker export is unavailable');
     }
@@ -238,11 +253,11 @@ export class MediasoupService implements RoomMediaController {
     return (await this.getOrCreateRoom(roomId)).router.rtpCapabilities;
   }
 
-  async createTransport(roomId: RoomId, _direction: 'send' | 'recv'): Promise<WebRtcTransport | undefined> {
+  async createTransport(roomId: RoomId, participantId: string, _direction: 'send' | 'recv'): Promise<WebRtcTransport | undefined> {
     const room = await this.getOrCreateRoom(roomId);
     const transport = await room.router.createWebRtcTransport(this.config.webRtcTransport);
 
-    room.transports.set(transport.id, transport);
+    room.transports.set(transport.id, { transport, participantId });
     transport.on('close', () => {
       room.transports.delete(transport.id);
     });
@@ -252,10 +267,10 @@ export class MediasoupService implements RoomMediaController {
 
   async connectTransport(roomId: RoomId, transportId: string, dtlsParameters: unknown): Promise<boolean> {
     const room = this.rooms.get(roomId);
-    const transport = room?.transports.get(transportId);
-    if (!transport) return false;
+    const transportRecord = room?.transports.get(transportId);
+    if (!transportRecord) return false;
 
-    await transport.connect({ dtlsParameters });
+    await transportRecord.transport.connect({ dtlsParameters });
     return true;
   }
 
@@ -268,11 +283,11 @@ export class MediasoupService implements RoomMediaController {
     source: MediaSource
   ): Promise<PublishedTrack | undefined> {
     const room = this.rooms.get(roomId);
-    const transport = room?.transports.get(transportId);
-    if (!room || !transport) return undefined;
+    const transportRecord = room?.transports.get(transportId);
+    if (!room || !transportRecord || transportRecord.participantId !== participantId) return undefined;
 
-    const producer = await transport.produce({ kind, rtpParameters, appData: { participantId, source } });
-    const record: RoomProducerRecord = { producer, participantId, kind, source };
+    const producer = await transportRecord.transport.produce({ kind, rtpParameters, appData: { participantId, source } });
+    const record: RoomProducerRecord = { producer, participantId, transportId, kind, source };
 
     room.producers.set(producer.id, record);
     producer.on('close', () => {
@@ -292,18 +307,21 @@ export class MediasoupService implements RoomMediaController {
     rtpCapabilities: unknown
   ): Promise<{ id: string; producerId: string; kind: MediaKind; rtpParameters: unknown } | undefined> {
     const room = this.rooms.get(roomId);
-    const transport = room?.transports.get(transportId);
+    const transportRecord = room?.transports.get(transportId);
     const producer = room?.producers.get(producerId);
-    if (!room || !transport || !producer) return undefined;
+    if (!room || !transportRecord || !producer) return undefined;
 
     if (!room.router.canConsume({ producerId, rtpCapabilities })) return undefined;
 
-    const consumer = await transport.consume({ producerId, rtpCapabilities, paused: false });
-    room.consumers.set(consumer.id, { consumer, producerId });
+    const consumer = await transportRecord.transport.consume({ producerId, rtpCapabilities, paused: false });
+    room.consumers.set(consumer.id, { consumer, producerId, participantId: transportRecord.participantId, transportId });
     consumer.on('close', () => {
       room.consumers.delete(consumer.id);
     });
     consumer.on('transportclose', () => {
+      room.consumers.delete(consumer.id);
+    });
+    consumer.on('producerclose', () => {
       room.consumers.delete(consumer.id);
     });
 
@@ -315,14 +333,42 @@ export class MediasoupService implements RoomMediaController {
     };
   }
 
-  async closeProducer(roomId: RoomId, producerId: string): Promise<PublishedTrack | undefined> {
+  async closeProducer(roomId: RoomId, participantId: string, producerId: string): Promise<PublishedTrack | undefined> {
     const room = this.rooms.get(roomId);
     const record = room?.producers.get(producerId);
-    if (!room || !record) return undefined;
+    if (!room || !record || record.participantId !== participantId) return undefined;
 
     record.producer.close();
     room.producers.delete(producerId);
     return toPublishedTrack(record);
+  }
+
+  async closeParticipant(roomId: RoomId, participantId: string): Promise<PublishedTrack[]> {
+    const room = this.rooms.get(roomId);
+    if (!room) return [];
+
+    const closed: PublishedTrack[] = [];
+
+    for (const [producerId, record] of [...room.producers.entries()]) {
+      if (record.participantId !== participantId) continue;
+      record.producer.close();
+      room.producers.delete(producerId);
+      closed.push(toPublishedTrack(record));
+    }
+
+    for (const [consumerId, record] of [...room.consumers.entries()]) {
+      if (record.participantId !== participantId) continue;
+      record.consumer.close();
+      room.consumers.delete(consumerId);
+    }
+
+    for (const [transportId, record] of [...room.transports.entries()]) {
+      if (record.participantId !== participantId) continue;
+      record.transport.close();
+      room.transports.delete(transportId);
+    }
+
+    return closed;
   }
 
   async closeRoom(roomId: RoomId): Promise<void> {
@@ -330,7 +376,7 @@ export class MediasoupService implements RoomMediaController {
     if (!room) return;
 
     for (const transport of room.transports.values()) {
-      transport.close();
+      transport.transport.close();
     }
 
     for (const producer of room.producers.values()) {

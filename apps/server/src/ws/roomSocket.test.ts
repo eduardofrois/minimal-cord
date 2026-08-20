@@ -27,6 +27,7 @@ async function startTestServer() {
     produce: async () => undefined,
     consume: async () => undefined,
     closeProducer: async () => undefined,
+    closeParticipant: async () => [],
     closeRoom: async () => {}
   };
 
@@ -160,5 +161,63 @@ describe('room WebSocket', () => {
       roomId: created.roomId
     });
     void biaJoined;
+  });
+
+  it('cleans up participant media on leave', async () => {
+    const closeParticipantCalls: Array<{ roomId: string; participantId: string }> = [];
+    const media: RoomMediaController = {
+      start: async () => {},
+      stop: async () => {},
+      getOrCreateRoom: async () => {
+        throw new Error('not used');
+      },
+      getRouterRtpCapabilities: async () => ({}),
+      createTransport: async () => undefined,
+      connectTransport: async () => false,
+      produce: async () => undefined,
+      consume: async () => undefined,
+      closeProducer: async () => undefined,
+      closeParticipant: async (roomId, participantId) => {
+        closeParticipantCalls.push({ roomId, participantId });
+        return [{ producerId: 'producer-1', participantId, kind: 'audio', source: 'mic' }];
+      },
+      closeRoom: async () => {}
+    };
+
+    const app = await createApp({ maxParticipantsPerRoom: 20, media });
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    cleanup.push(() => app.close());
+    const address = app.server.address();
+    if (!address || typeof address === 'string') throw new Error('missing test address');
+
+    const url = `ws://127.0.0.1:${address.port}/ws`;
+    const ana = new WebSocket(url);
+    const bia = new WebSocket(url);
+    cleanup.push(() => ana.close(), () => bia.close());
+
+    await Promise.all([
+      new Promise((resolve) => ana.once('open', resolve)),
+      new Promise((resolve) => bia.once('open', resolve))
+    ]);
+
+    const createdPromise = waitForMessage(ana, 'room:created');
+    const anaJoinedPromise = waitForMessage(ana, 'room:joined');
+    ana.send(JSON.stringify({ type: 'room:create', displayName: 'Ana' }));
+    const created = await createdPromise;
+    const anaJoined = await anaJoinedPromise;
+
+    const biaJoinedPromise = waitForMessage(bia, 'room:joined');
+    bia.send(JSON.stringify({ type: 'room:join', roomId: created.roomId, displayName: 'Bia' }));
+    await biaJoinedPromise;
+
+    const producerClosedPromise = waitForMessage(bia, 'media:producer-closed');
+    ana.send(JSON.stringify({ type: 'room:leave' }));
+
+    await expect(producerClosedPromise).resolves.toMatchObject({
+      type: 'media:producer-closed',
+      producerId: 'producer-1',
+      participantId: anaJoined.participantId
+    });
+    expect(closeParticipantCalls).toEqual([{ roomId: created.roomId, participantId: anaJoined.participantId }]);
   });
 });

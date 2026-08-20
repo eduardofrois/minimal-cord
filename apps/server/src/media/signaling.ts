@@ -53,7 +53,7 @@ export async function handleMediaSignal(message: ClientMessage, context: Signali
       return true;
     }
     case 'media:create-transport': {
-      const transport = await context.media.createTransport(context.roomId, message.direction);
+      const transport = await context.media.createTransport(context.roomId, context.participantId, message.direction);
       if (!transport) return false;
 
       context.send({
@@ -98,7 +98,7 @@ export async function handleMediaSignal(message: ClientMessage, context: Signali
       return true;
     }
     case 'media:close-producer': {
-      const producer = await context.media.closeProducer(context.roomId, message.producerId);
+      const producer = await context.media.closeProducer(context.roomId, context.participantId, message.producerId);
       if (!producer) return false;
 
       context.broadcast({ type: 'media:producer-closed', producerId: producer.producerId, participantId: producer.participantId });

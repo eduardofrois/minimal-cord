@@ -107,8 +107,14 @@ async function handleClose(roomStore: RoomStore, registry: SocketRegistry, socke
   const entry = registry.unregister(socket);
   if (!entry) return;
 
-  registry.broadcastToRoomExcept(entry.roomId, entry.participantId, { type: 'participant:left', participantId: entry.participantId });
+  const closedProducers = await media.closeParticipant(entry.roomId, entry.participantId);
   roomStore.removeParticipant(entry.roomId, entry.participantId);
+
+  for (const producer of closedProducers) {
+    registry.broadcastToRoom(entry.roomId, { type: 'media:producer-closed', producerId: producer.producerId, participantId: producer.participantId });
+  }
+
+  registry.broadcastToRoomExcept(entry.roomId, entry.participantId, { type: 'participant:left', participantId: entry.participantId });
 
   if (!roomStore.getRoom(entry.roomId)) {
     await media.closeRoom(entry.roomId);
