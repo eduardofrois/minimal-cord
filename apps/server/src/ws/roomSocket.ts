@@ -19,6 +19,19 @@ function sendInvalidMessage(socket: SendableSocket): void {
   sendMessage(socket, { type: 'error', code: 'invalid-message', message: 'Mensagem inválida.' });
 }
 
+function sendAlreadyJoined(socket: SendableSocket): void {
+  sendMessage(socket, { type: 'error', code: 'already-joined', message: 'Socket already joined a room.' });
+}
+
+function rejectIfJoined(registry: SocketRegistry, socket: SendableSocket): boolean {
+  if (registry.get(socket)) {
+    sendAlreadyJoined(socket);
+    return true;
+  }
+
+  return false;
+}
+
 function sendJoined(socket: SendableSocket, roomId: RoomId, participantId: string, roomStore: RoomStore): void {
   sendMessage(socket, {
     type: 'room:joined',
@@ -30,6 +43,8 @@ function sendJoined(socket: SendableSocket, roomId: RoomId, participantId: strin
 }
 
 function createRoom(roomStore: RoomStore, registry: SocketRegistry, socket: SendableSocket, displayName: string, state: ConnectionState): void {
+  if (rejectIfJoined(registry, socket)) return;
+
   const room = roomStore.createRoom();
   const participant = roomStore.addParticipant(room.id, displayName);
 
@@ -47,6 +62,8 @@ function createRoom(roomStore: RoomStore, registry: SocketRegistry, socket: Send
 }
 
 function joinRoom(roomStore: RoomStore, registry: SocketRegistry, socket: SendableSocket, roomId: RoomId, displayName: string, roomLimit: number, state: ConnectionState): void {
+  if (rejectIfJoined(registry, socket)) return;
+
   const result = roomStore.addParticipant(roomId, displayName);
 
   if (result === 'room-not-found') {

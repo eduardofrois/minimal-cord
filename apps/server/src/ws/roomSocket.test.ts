@@ -44,6 +44,34 @@ describe('room WebSocket', () => {
     expect(joined.participants[0].displayName).toBe('Ana');
   });
 
+  it('rejects duplicate create and join messages on the same socket', async () => {
+    const url = await startTestServer();
+    const creator = new WebSocket(url);
+    cleanup.push(() => creator.close());
+
+    await new Promise((resolve) => creator.once('open', resolve));
+
+    const createdPromise = waitForMessage(creator, 'room:created');
+    const joinedPromise = waitForMessage(creator, 'room:joined');
+    creator.send(JSON.stringify({ type: 'room:create', displayName: 'Ana' }));
+    const created = await createdPromise;
+    await joinedPromise;
+
+    const duplicateCreateErrorPromise = waitForMessage(creator, 'error');
+    creator.send(JSON.stringify({ type: 'room:create', displayName: 'Ana 2' }));
+    await expect(duplicateCreateErrorPromise).resolves.toMatchObject({
+      type: 'error',
+      code: 'already-joined'
+    });
+
+    const duplicateJoinErrorPromise = waitForMessage(creator, 'error');
+    creator.send(JSON.stringify({ type: 'room:join', roomId: created.roomId, displayName: 'Ana 3' }));
+    await expect(duplicateJoinErrorPromise).resolves.toMatchObject({
+      type: 'error',
+      code: 'already-joined'
+    });
+  });
+
   it('broadcasts chat to participants in the same room', async () => {
     const url = await startTestServer();
     const ana = new WebSocket(url);
@@ -72,5 +100,47 @@ describe('room WebSocket', () => {
       type: 'chat:message',
       message: { displayName: 'Bia', text: 'oi' }
     });
+  });
+
+  it('cleans up participants on leave and close', async () => {
+    const url = await startTestServer();
+    const ana = new WebSocket(url);
+    const bia = new WebSocket(url);
+    cleanup.push(() => ana.close(), () => bia.close());
+
+    await Promise.all([
+      new Promise((resolve) => ana.once('open', resolve)),
+      new Promise((resolve) => bia.once('open', resolve))
+    ]);
+
+    const createdPromise = waitForMessage(ana, 'room:created');
+    const anaJoinedPromise = waitForMessage(ana, 'room:joined');
+    ana.send(JSON.stringify({ type: 'room:create', displayName: 'Ana' }));
+    const created = await createdPromise;
+    const anaJoined = await anaJoinedPromise;
+
+    const biaJoinedPromise = waitForMessage(bia, 'room:joined');
+    bia.send(JSON.stringify({ type: 'room:join', roomId: created.roomId, displayName: 'Bia' }));
+    const biaJoined = await biaJoinedPromise;
+
+    const leftPromise = waitForMessage(bia, 'participant:left');
+    ana.send(JSON.stringify({ type: 'room:leave' }));
+    await expect(leftPromise).resolves.toMatchObject({
+      type: 'participant:left',
+      participantId: anaJoined.participantId
+    });
+
+    bia.close();
+
+    const charlie = new WebSocket(url);
+    cleanup.push(() => charlie.close());
+    await new Promise((resolve) => charlie.once('open', resolve));
+    const charlieJoinPromise = waitForMessage(charlie, 'room:not-found');
+    charlie.send(JSON.stringify({ type: 'room:join', roomId: created.roomId, displayName: 'Cleo' }));
+    await expect(charlieJoinPromise).resolves.toMatchObject({
+      type: 'room:not-found',
+      roomId: created.roomId
+    });
+    void biaJoined;
   });
 });
