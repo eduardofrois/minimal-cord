@@ -130,7 +130,9 @@ describe('room WebSocket', () => {
       participantId: anaJoined.participantId
     });
 
+    const biaClosedPromise = new Promise((resolve) => bia.once('close', resolve));
     bia.close();
+    await biaClosedPromise;
 
     const charlie = new WebSocket(url);
     cleanup.push(() => charlie.close());
