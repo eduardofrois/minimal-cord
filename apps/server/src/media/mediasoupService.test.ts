@@ -158,6 +158,32 @@ describe('MediasoupService media cleanup', () => {
     expect(await service.closeProducer(roomId, 'alice', producer!.producerId)).toMatchObject(producer!);
   });
 
+  it('rejects connecting another participant transport', async () => {
+    const { service } = createFakeService();
+    await service.start();
+
+    const roomId = 'room-1';
+    const transport = await service.createTransport(roomId, 'alice', 'send');
+
+    await expect(service.connectTransport(roomId, 'bob', transport!.id, {})).resolves.toBe(false);
+    await expect(service.connectTransport(roomId, 'alice', transport!.id, {})).resolves.toBe(true);
+  });
+
+  it('rejects consuming from another participant transport', async () => {
+    const { service } = createFakeService();
+    await service.start();
+
+    const roomId = 'room-1';
+    const aliceTransport = await service.createTransport(roomId, 'alice', 'send');
+    const bobTransport = await service.createTransport(roomId, 'bob', 'recv');
+    const producer = await service.produce(roomId, aliceTransport!.id, 'alice', 'audio', {}, 'mic');
+
+    await expect(service.consume(roomId, 'alice', bobTransport!.id, producer!.producerId, {})).resolves.toBeUndefined();
+    await expect(service.consume(roomId, 'bob', bobTransport!.id, producer!.producerId, {})).resolves.toMatchObject({
+      producerId: producer!.producerId
+    });
+  });
+
   it('removes stale consumers when a producer closes', async () => {
     const { service } = createFakeService();
     await service.start();
@@ -168,7 +194,7 @@ describe('MediasoupService media cleanup', () => {
     const producer = await service.produce(roomId, publisherTransport!.id, 'alice', 'audio', {}, 'mic');
 
     const room = await service.getOrCreateRoom(roomId);
-    await service.consume(roomId, viewerTransport!.id, producer!.producerId, {});
+    await service.consume(roomId, 'bob', viewerTransport!.id, producer!.producerId, {});
     expect(room.consumers.size).toBe(1);
 
     await service.closeProducer(roomId, 'alice', producer!.producerId);
@@ -183,7 +209,7 @@ describe('MediasoupService media cleanup', () => {
     const aliceTransport = await service.createTransport(roomId, 'alice', 'send');
     const bobTransport = await service.createTransport(roomId, 'bob', 'recv');
     const aliceProducer = await service.produce(roomId, aliceTransport!.id, 'alice', 'audio', {}, 'mic');
-    await service.consume(roomId, bobTransport!.id, aliceProducer!.producerId, {});
+    await service.consume(roomId, 'bob', bobTransport!.id, aliceProducer!.producerId, {});
 
     const room = await service.getOrCreateRoom(roomId);
     expect(room.transports.size).toBe(2);

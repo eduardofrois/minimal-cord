@@ -113,7 +113,7 @@ export interface RoomMediaController {
   getOrCreateRoom(roomId: RoomId): Promise<RoomMediaState>;
   getRouterRtpCapabilities(roomId: RoomId): Promise<unknown>;
   createTransport(roomId: RoomId, participantId: string, direction: 'send' | 'recv'): Promise<WebRtcTransport | undefined>;
-  connectTransport(roomId: RoomId, transportId: string, dtlsParameters: unknown): Promise<boolean>;
+  connectTransport(roomId: RoomId, participantId: string, transportId: string, dtlsParameters: unknown): Promise<boolean>;
   produce(
     roomId: RoomId,
     transportId: string,
@@ -124,6 +124,7 @@ export interface RoomMediaController {
   ): Promise<PublishedTrack | undefined>;
   consume(
     roomId: RoomId,
+    participantId: string,
     transportId: string,
     producerId: string,
     rtpCapabilities: unknown
@@ -265,10 +266,10 @@ export class MediasoupService implements RoomMediaController {
     return transport;
   }
 
-  async connectTransport(roomId: RoomId, transportId: string, dtlsParameters: unknown): Promise<boolean> {
+  async connectTransport(roomId: RoomId, participantId: string, transportId: string, dtlsParameters: unknown): Promise<boolean> {
     const room = this.rooms.get(roomId);
     const transportRecord = room?.transports.get(transportId);
-    if (!transportRecord) return false;
+    if (!transportRecord || transportRecord.participantId !== participantId) return false;
 
     await transportRecord.transport.connect({ dtlsParameters });
     return true;
@@ -302,6 +303,7 @@ export class MediasoupService implements RoomMediaController {
 
   async consume(
     roomId: RoomId,
+    participantId: string,
     transportId: string,
     producerId: string,
     rtpCapabilities: unknown
@@ -309,7 +311,7 @@ export class MediasoupService implements RoomMediaController {
     const room = this.rooms.get(roomId);
     const transportRecord = room?.transports.get(transportId);
     const producer = room?.producers.get(producerId);
-    if (!room || !transportRecord || !producer) return undefined;
+    if (!room || !transportRecord || transportRecord.participantId !== participantId || !producer) return undefined;
 
     if (!room.router.canConsume({ producerId, rtpCapabilities })) return undefined;
 

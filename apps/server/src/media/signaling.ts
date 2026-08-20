@@ -64,7 +64,7 @@ export async function handleMediaSignal(message: ClientMessage, context: Signali
       return true;
     }
     case 'media:connect-transport': {
-      const connected = await context.media.connectTransport(context.roomId, message.transportId, message.dtlsParameters);
+      const connected = await context.media.connectTransport(context.roomId, context.participantId, message.transportId, message.dtlsParameters);
       if (!connected) return false;
 
       context.send({ type: 'media:transport-connected', transportId: message.transportId });
@@ -88,6 +88,7 @@ export async function handleMediaSignal(message: ClientMessage, context: Signali
     case 'media:consume': {
       const consumer = await context.media.consume(
         context.roomId,
+        context.participantId,
         message.transportId,
         message.producerId,
         message.rtpCapabilities
