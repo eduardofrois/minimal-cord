@@ -1,4 +1,4 @@
-import type { ChatMessage, Participant, PublishedTrack, RoomId } from './models';
+import type { ChatMessage, Participant, PublishedTrack, RoomId } from './models.js';
 
 export type ClientMessage =
   | { type: 'room:create'; displayName: string }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MAX_PARTICIPANTS, isClientMessage } from './index';
+import { DEFAULT_MAX_PARTICIPANTS, isClientMessage } from './index.js';
 
 describe('shared protocol', () => {
   it('exports the default room participant limit', () => {
