@@ -9,7 +9,7 @@ export type ClientMessage =
   | { type: 'media:create-transport'; direction: 'send' | 'recv' }
   | { type: 'media:connect-transport'; transportId: string; dtlsParameters: unknown }
   | { type: 'media:produce'; transportId: string; kind: 'audio' | 'video'; rtpParameters: unknown; source: 'mic' | 'camera' | 'screen' }
-  | { type: 'media:consume'; producerId: string; rtpCapabilities: unknown }
+  | { type: 'media:consume'; transportId: string; producerId: string; rtpCapabilities: unknown }
   | { type: 'media:close-producer'; producerId: string };
 
 export type ServerMessage =
@@ -57,7 +57,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     case 'media:produce':
       return hasNonEmptyString(value, 'transportId') && (value.kind === 'audio' || value.kind === 'video') && (value.source === 'mic' || value.source === 'camera' || value.source === 'screen') && 'rtpParameters' in value;
     case 'media:consume':
-      return hasNonEmptyString(value, 'producerId') && 'rtpCapabilities' in value;
+      return hasNonEmptyString(value, 'transportId') && hasNonEmptyString(value, 'producerId') && 'rtpCapabilities' in value;
     case 'media:close-producer':
       return hasNonEmptyString(value, 'producerId');
     default:

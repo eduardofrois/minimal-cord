@@ -3,6 +3,8 @@ import type { RoomStore } from '../rooms/roomStore.js';
 import type { Participant, RoomId } from '@minimal-cord/shared';
 import { SocketRegistry } from './socketRegistry.js';
 import { parseClientMessage, sendMessage, type SendableSocket } from './messages.js';
+import { handleMediaSignal } from '../media/signaling.js';
+import type { RoomMediaController } from '../media/mediasoupService.js';
 
 interface RoomSocketConnection extends SendableSocket {
   on(event: 'message', listener: (raw: Buffer | ArrayBuffer | Buffer[] | string) => void): void;
@@ -13,6 +15,10 @@ interface RoomSocketConnection extends SendableSocket {
 interface ConnectionState {
   roomId?: RoomId;
   participant?: Participant;
+}
+
+function getRoomLimit(roomStore: RoomStore): number {
+  return (roomStore as unknown as { options: { maxParticipantsPerRoom: number } }).options.maxParticipantsPerRoom;
 }
 
 function sendInvalidMessage(socket: SendableSocket): void {
@@ -97,15 +103,19 @@ function handleChat(roomStore: RoomStore, registry: SocketRegistry, socket: Send
   registry.broadcastToRoom(entry.roomId, { type: 'chat:message', message });
 }
 
-function handleClose(roomStore: RoomStore, registry: SocketRegistry, socket: SendableSocket): void {
+async function handleClose(roomStore: RoomStore, registry: SocketRegistry, socket: SendableSocket, media: RoomMediaController): Promise<void> {
   const entry = registry.unregister(socket);
   if (!entry) return;
 
   registry.broadcastToRoomExcept(entry.roomId, entry.participantId, { type: 'participant:left', participantId: entry.participantId });
   roomStore.removeParticipant(entry.roomId, entry.participantId);
+
+  if (!roomStore.getRoom(entry.roomId)) {
+    await media.closeRoom(entry.roomId);
+  }
 }
 
-export function registerRoomSocket(app: FastifyInstance, roomStore: RoomStore, roomLimit: number): void {
+export function registerRoomSocket(app: FastifyInstance, roomStore: RoomStore, media: RoomMediaController): void {
   const registry = new SocketRegistry();
 
   app.get('/ws', { websocket: true }, (socket: RoomSocketConnection) => {
@@ -118,18 +128,42 @@ export function registerRoomSocket(app: FastifyInstance, roomStore: RoomStore, r
         return;
       }
 
+      if (message.type.startsWith('media:')) {
+        const entry = registry.get(socket);
+        if (!entry) {
+          sendInvalidMessage(socket);
+          return;
+        }
+
+        void handleMediaSignal(message, {
+          roomId: entry.roomId,
+          participantId: entry.participantId,
+          media,
+          send: (response) => sendMessage(socket, response),
+          broadcast: (response) => registry.broadcastToRoom(entry.roomId, response)
+        })
+          .then((handled) => {
+            if (!handled) sendInvalidMessage(socket);
+          })
+          .catch(() => {
+            sendInvalidMessage(socket);
+          });
+
+        return;
+      }
+
       switch (message.type) {
         case 'room:create':
           createRoom(roomStore, registry, socket, message.displayName, state);
           return;
         case 'room:join':
-          joinRoom(roomStore, registry, socket, message.roomId, message.displayName, roomLimit, state);
+          joinRoom(roomStore, registry, socket, message.roomId, message.displayName, getRoomLimit(roomStore), state);
           return;
         case 'chat:send':
           handleChat(roomStore, registry, socket, message.text);
           return;
         case 'room:leave':
-          handleClose(roomStore, registry, socket);
+          void handleClose(roomStore, registry, socket, media).catch(() => {});
           return;
         default:
           sendInvalidMessage(socket);
@@ -137,7 +171,7 @@ export function registerRoomSocket(app: FastifyInstance, roomStore: RoomStore, r
     });
 
     socket.on('close', () => {
-      handleClose(roomStore, registry, socket);
+      void handleClose(roomStore, registry, socket, media).catch(() => {});
     });
   });
 }

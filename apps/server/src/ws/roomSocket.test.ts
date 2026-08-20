@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket, { type RawData } from 'ws';
 import { createApp } from '../app.js';
+import type { RoomMediaController } from '../media/mediasoupService.js';
 
 let cleanup: Array<() => Promise<void> | void> = [];
 
@@ -14,7 +15,22 @@ function waitForMessage(ws: WebSocket, type: string): Promise<any> {
 }
 
 async function startTestServer() {
-  const app = await createApp({ maxParticipantsPerRoom: 20 });
+  const media: RoomMediaController = {
+    start: async () => {},
+    stop: async () => {},
+    getOrCreateRoom: async () => {
+      throw new Error('not used');
+    },
+    getRouterRtpCapabilities: async () => ({}),
+    createTransport: async () => undefined,
+    connectTransport: async () => false,
+    produce: async () => undefined,
+    consume: async () => undefined,
+    closeProducer: async () => undefined,
+    closeRoom: async () => {}
+  };
+
+  const app = await createApp({ maxParticipantsPerRoom: 20, media });
   await app.listen({ port: 0, host: '127.0.0.1' });
   cleanup.push(() => app.close());
   const address = app.server.address();
