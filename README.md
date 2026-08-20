@@ -15,9 +15,7 @@ cp .env.example .env
 pnpm dev
 ```
 
-Frontend: http://localhost:5173
-
-Backend: http://localhost:3000
+`pnpm dev` is a workspace command. It becomes active once `apps/server` and `apps/web` exist.
 
 ## Checks
 
@@ -26,3 +24,5 @@ pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+These are workspace checks. They validate packages once workspace packages exist.
