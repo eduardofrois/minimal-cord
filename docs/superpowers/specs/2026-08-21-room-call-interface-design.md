@@ -82,7 +82,7 @@ Os controles ficam mais compactos e usam apenas ícones SVG visíveis:
 - tela cheia: ícone de expandir, disponível para o compartilhamento em destaque;
 - desconectar: ícone de telefone desligado em botão vermelho.
 
-Os botões não terão texto visível. Cada botão terá `aria-label` descritivo para acessibilidade e `title` para tooltip nativo do navegador. Como o projeto ainda não usa biblioteca de ícones, os ícones serão SVGs inline pequenos e reaproveitáveis no próprio frontend.
+Os botões não terão texto visível. Cada botão terá `aria-label` descritivo para acessibilidade e `title` para tooltip nativo do navegador. Os ícones serão fornecidos por `lucide-react`, usando ícones que correspondam diretamente à ação de cada botão.
 
 O botão de parar tela encerra todos os compartilhamentos locais ativos para manter a primeira versão simples e previsível.
 

@@ -1,6 +1,7 @@
 import type { ChatMessage } from '@minimal-cord/shared';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { MAX_CHAT_TEXT_LENGTH } from '@minimal-cord/shared';
+import { Send } from 'lucide-react';
 
 type ChatPanelProps = {
   messages: ChatMessage[];
@@ -44,7 +45,9 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
           onChange={(event) => setText(event.target.value)}
           autoComplete="off"
         />
-        <button type="submit">Enviar</button>
+        <button type="submit" aria-label="Enviar mensagem" title="Enviar mensagem">
+          <Send aria-hidden="true" size={18} strokeWidth={2.2} />
+        </button>
       </form>
     </aside>
   );
