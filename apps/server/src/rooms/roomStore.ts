@@ -18,12 +18,15 @@ interface StoredRoom {
 
 export interface RoomStoreOptions {
   maxParticipantsPerRoom: number;
+  emptyRoomGraceMs?: number;
+  onRoomDeleted?: (roomId: RoomId) => void;
 }
 
 export type AddParticipantResult = Participant | 'room-not-found' | 'room-full';
 
 export class RoomStore {
   private readonly rooms = new Map<RoomId, StoredRoom>();
+  private readonly emptyRoomTimers = new Map<RoomId, ReturnType<typeof setTimeout>>();
 
   constructor(private readonly options: RoomStoreOptions) {}
 
@@ -57,6 +60,12 @@ export class RoomStore {
     if (!room) return 'room-not-found';
     if (room.participants.size >= this.options.maxParticipantsPerRoom) return 'room-full';
 
+    const emptyRoomTimer = this.emptyRoomTimers.get(roomId);
+    if (emptyRoomTimer) {
+      clearTimeout(emptyRoomTimer);
+      this.emptyRoomTimers.delete(roomId);
+    }
+
     const participant: Participant = {
       id: nanoid(),
       displayName: displayName.trim().slice(0, MAX_DISPLAY_NAME_LENGTH),
@@ -74,7 +83,20 @@ export class RoomStore {
     room.participants.delete(participantId);
 
     if (room.participants.size === 0) {
-      this.rooms.delete(roomId);
+      if (this.emptyRoomTimers.has(roomId)) return;
+
+      const graceMs = this.options.emptyRoomGraceMs ?? 30_000;
+      const timer = setTimeout(() => {
+        const currentRoom = this.rooms.get(roomId);
+        this.emptyRoomTimers.delete(roomId);
+
+        if (!currentRoom || currentRoom.participants.size > 0) return;
+
+        this.rooms.delete(roomId);
+        this.options.onRoomDeleted?.(roomId);
+      }, graceMs);
+
+      this.emptyRoomTimers.set(roomId, timer);
     }
   }
 

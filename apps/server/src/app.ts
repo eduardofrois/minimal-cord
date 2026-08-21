@@ -6,13 +6,20 @@ import { registerRoomSocket } from './ws/roomSocket.js';
 
 export interface CreateAppOptions {
   maxParticipantsPerRoom: number;
+  emptyRoomGraceMs?: number;
   media?: RoomMediaController;
 }
 
 export async function createApp(options: CreateAppOptions) {
   const app = Fastify({ logger: true });
-  const roomStore = new RoomStore({ maxParticipantsPerRoom: options.maxParticipantsPerRoom });
   const media = options.media ?? new MediasoupService(parseMediasoupConfig());
+  const roomStore = new RoomStore({
+    maxParticipantsPerRoom: options.maxParticipantsPerRoom,
+    emptyRoomGraceMs: options.emptyRoomGraceMs,
+    onRoomDeleted: (roomId) => {
+      void media.closeRoom(roomId).catch(() => {});
+    }
+  });
 
   await app.register(websocket);
 

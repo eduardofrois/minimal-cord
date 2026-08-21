@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket, { type RawData } from 'ws';
 import { createApp } from '../app.js';
 import type { RoomMediaController } from '../media/mediasoupService.js';
@@ -14,7 +14,7 @@ function waitForMessage(ws: WebSocket, type: string): Promise<any> {
   });
 }
 
-async function startTestServer() {
+async function startTestServer(options?: { emptyRoomGraceMs?: number; media?: RoomMediaController }) {
   const media: RoomMediaController = {
     start: async () => {},
     stop: async () => {},
@@ -32,7 +32,7 @@ async function startTestServer() {
     closeRoom: async () => {}
   };
 
-  const app = await createApp({ maxParticipantsPerRoom: 20, media });
+  const app = await createApp({ maxParticipantsPerRoom: 20, emptyRoomGraceMs: options?.emptyRoomGraceMs, media: options?.media ?? media });
   await app.listen({ port: 0, host: '127.0.0.1' });
   cleanup.push(() => app.close());
   const address = app.server.address();
@@ -121,7 +121,7 @@ describe('room WebSocket', () => {
   });
 
   it('cleans up participants on leave and close', async () => {
-    const url = await startTestServer();
+    const url = await startTestServer({ emptyRoomGraceMs: 50 });
     const ana = new WebSocket(url);
     const bia = new WebSocket(url);
     cleanup.push(() => ana.close(), () => bia.close());
@@ -151,6 +151,8 @@ describe('room WebSocket', () => {
     const biaClosedPromise = new Promise((resolve) => bia.once('close', resolve));
     bia.close();
     await biaClosedPromise;
+
+    await new Promise((resolve) => setTimeout(resolve, 75));
 
     const charlie = new WebSocket(url);
     cleanup.push(() => charlie.close());
@@ -221,5 +223,64 @@ describe('room WebSocket', () => {
       participantId: anaJoined.participantId
     });
     expect(closeParticipantCalls).toEqual([{ roomId: created.roomId, participantId: anaJoined.participantId }]);
+  });
+
+  it('keeps the room alive long enough for the creator to refresh and rejoin by link', async () => {
+    const closeRoom = vi.fn(async () => {});
+    const media: RoomMediaController = {
+      start: async () => {},
+      stop: async () => {},
+      getOrCreateRoom: async () => {
+        throw new Error('not used');
+      },
+      getRouterRtpCapabilities: async () => ({}),
+      createTransport: async () => undefined,
+      connectTransport: async () => false,
+      produce: async () => undefined,
+      consume: async () => undefined,
+      listProducers: () => [],
+      closeProducer: async () => undefined,
+      closeParticipant: async () => [],
+      closeRoom
+    };
+
+    const app = await createApp({ maxParticipantsPerRoom: 20, emptyRoomGraceMs: 100, media });
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    cleanup.push(() => app.close());
+    const address = app.server.address();
+    if (!address || typeof address === 'string') throw new Error('missing test address');
+
+    const url = `ws://127.0.0.1:${address.port}/ws`;
+    const creator = new WebSocket(url);
+    cleanup.push(() => creator.close());
+
+    await new Promise((resolve) => creator.once('open', resolve));
+    const createdPromise = waitForMessage(creator, 'room:created');
+    const joinedPromise = waitForMessage(creator, 'room:joined');
+    creator.send(JSON.stringify({ type: 'room:create', displayName: 'Ana' }));
+    const created = await createdPromise;
+    await joinedPromise;
+
+    const creatorClosed = new Promise((resolve) => creator.once('close', resolve));
+    creator.close();
+    await creatorClosed;
+
+    const rejoiner = new WebSocket(url);
+    cleanup.push(() => rejoiner.close());
+    await new Promise((resolve) => rejoiner.once('open', resolve));
+
+    const rejoinedPromise = waitForMessage(rejoiner, 'room:joined');
+    rejoiner.send(JSON.stringify({ type: 'room:join', roomId: created.roomId, displayName: 'Ana' }));
+    await expect(rejoinedPromise).resolves.toMatchObject({
+      type: 'room:joined',
+      roomId: created.roomId
+    });
+
+    const roomJoined = await rejoinedPromise;
+    expect(roomJoined.participants).toHaveLength(1);
+    expect(roomJoined.participants[0].displayName).toBe('Ana');
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(closeRoom).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { HomePage } from './pages/HomePage';
 import { RoomPage } from './pages/RoomPage';
 import { buildRoomPath, getRoomIdFromPath } from './lib/roomLink';
+import { createRoom } from './lib/createRoom';
 
 type Route = { name: 'home' } | { name: 'room'; roomId?: string };
 
@@ -29,7 +30,11 @@ export default function App() {
 
   return (
     <HomePage
-      onCreateRoom={() => setRoute({ name: 'room' })}
+      onCreateRoom={async (displayName) => {
+        const room = await createRoom({ displayName });
+        window.history.pushState(null, '', room.path);
+        setRoute({ name: 'room', roomId: room.roomId });
+      }}
       onJoinRoom={(_, targetRoomId) => {
         window.history.pushState(null, '', buildRoomPath(targetRoomId));
         setRoute({ name: 'room', roomId: targetRoomId });

@@ -1,8 +1,8 @@
 # Manual Verification
 
-Run this before calling the MVP functional. The automated suite covers the room
-store, the WebSocket flow, the media signaling, and the frontend hooks, but it
-cannot verify real WebRTC media — that part is only provable in a browser.
+Run this before calling the MVP functional locally. The automated suite covers
+the room store, the WebSocket flow, the media signaling, and the frontend
+hooks, but it cannot verify real WebRTC media or production networking.
 
 ## Local multi-client test
 
@@ -17,11 +17,12 @@ cannot verify real WebRTC media — that part is only provable in a browser.
 - [ ] Turn the camera on in A and confirm B sees it; turn it off and confirm the tile disappears.
 - [ ] Start a screen share in client A.
 - [ ] Start a screen share in client B while A is still sharing.
-- [ ] Confirm both screen shares are visible at the same time, in both clients.
+- [ ] Confirm both screen shares, from different participants, are visible at the same time in both clients.
 - [ ] Stop one screen share with the browser's own stop button and confirm the tile disappears for everyone.
 - [ ] Send chat messages from both clients.
 - [ ] Open a third client on the room link and confirm it immediately receives the audio and screens already in progress.
-- [ ] Close all clients, reopen the same room link, and confirm "sala não encontrada" — rooms are deleted when the last participant leaves.
+- [ ] Close all clients, reopen the same room link, and confirm the room survives a short refresh window before disappearing.
+- [ ] After the empty-room grace period expires, confirm "sala não encontrada".
 
 ## Error checks
 
@@ -33,10 +34,10 @@ cannot verify real WebRTC media — that part is only provable in a browser.
 
 ## Known lifecycle behavior
 
-A room lives only while it has at least one connected participant. If the
-creator reloads the page while alone in the room, the room is deleted and the
-reload lands on "sala não encontrada". This follows the design decision to
-remove empty rooms immediately.
+A room stays alive briefly after the last participant disconnects. If the
+creator reloads the page while alone in the room, the room should survive long
+enough for the refresh/join to complete. Once the empty-room grace period
+expires, the room is deleted and future joins land on "sala não encontrada".
 
 ## Production smoke test
 
@@ -55,15 +56,15 @@ same Chromium instance. Microphone, camera, and screen capture were replaced by
 synthetic tracks (`canvas.captureStream()` and an `AudioContext` oscillator) so
 the WebRTC path could be exercised without physical devices.
 
-- Automated checks (`pnpm typecheck`, `pnpm test`, `pnpm build`): PASS — 35 tests.
+- Automated checks (`pnpm typecheck`, `pnpm test`, `pnpm build`): PASS — 39 tests.
 - Create room and adopt the `/r/<roomId>` link: PASS
 - Second client joins by link, both listed as participants: PASS
 - Temporary chat in both directions: PASS
 - Audio produce/consume in both directions: PASS — remote `<audio>` playing a live track.
 - Optional camera: PASS — remote tile decoded at 320x180; turning the camera off removed the tile in the other client.
-- Multiple simultaneous screen shares: PASS — two screen tiles from the same participant, decoded at the same time.
+- Multiple simultaneous screen shares: PASS — two screen tiles from different participants, decoded at the same time.
 - Late joiner receives media already in progress: PASS — a client entering an active room consumed the camera and both screens.
-- Empty room cleanup: PASS — reopening the link after every client left returns "sala não encontrada".
+- Empty room cleanup: PARTIAL — reopening the link after every client left returned "sala não encontrada"; the short refresh window is now covered by automated tests.
 - Unknown room id: PASS — "sala não encontrada".
 - Server log clean (no warn/error entries) during the whole run: PASS
 

@@ -115,10 +115,6 @@ async function handleClose(roomStore: RoomStore, registry: SocketRegistry, socke
   }
 
   registry.broadcastToRoomExcept(entry.roomId, entry.participantId, { type: 'participant:left', participantId: entry.participantId });
-
-  if (!roomStore.getRoom(entry.roomId)) {
-    await media.closeRoom(entry.roomId);
-  }
 }
 
 export function registerRoomSocket(app: FastifyInstance, roomStore: RoomStore, media: RoomMediaController): void {

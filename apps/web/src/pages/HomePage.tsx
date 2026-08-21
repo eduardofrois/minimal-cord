@@ -2,7 +2,7 @@ import { FormEvent, useState } from 'react';
 import { readDisplayName, saveDisplayName } from '../lib/nameStorage';
 
 type HomePageProps = {
-  onCreateRoom(displayName: string): void;
+  onCreateRoom(displayName: string): Promise<void> | void;
   onJoinRoom(displayName: string, roomId: string): void;
 };
 
@@ -11,7 +11,7 @@ export function HomePage({ onCreateRoom, onJoinRoom }: HomePageProps) {
   const [roomId, setRoomId] = useState('');
   const [error, setError] = useState('');
 
-  function handleDisplayNameSubmit(action: () => void) {
+  function handleDisplayNameSubmit(action: () => Promise<void> | void) {
     const trimmedDisplayName = displayName.trim();
 
     if (!trimmedDisplayName) {
@@ -22,11 +22,26 @@ export function HomePage({ onCreateRoom, onJoinRoom }: HomePageProps) {
     saveDisplayName(trimmedDisplayName);
     setDisplayName(trimmedDisplayName);
     setError('');
-    action();
+    void action();
   }
 
-  function handleCreateRoom() {
-    handleDisplayNameSubmit(() => onCreateRoom(displayName.trim()));
+  async function handleCreateRoom() {
+    const trimmedDisplayName = displayName.trim();
+
+    if (!trimmedDisplayName) {
+      setError('Informe seu nome para continuar.');
+      return;
+    }
+
+    saveDisplayName(trimmedDisplayName);
+    setDisplayName(trimmedDisplayName);
+    setError('');
+
+    try {
+      await onCreateRoom(trimmedDisplayName);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Não foi possível criar a sala.');
+    }
   }
 
   function handleJoinRoom(event: FormEvent<HTMLFormElement>) {
