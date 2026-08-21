@@ -1,15 +1,12 @@
 import { HomePage } from './pages/HomePage';
+import { RoomPage } from './pages/RoomPage';
 import { buildRoomPath, getRoomIdFromPath } from './lib/roomLink';
 
 export default function App() {
   const roomId = getRoomIdFromPath(window.location.pathname);
 
   if (roomId) {
-    return (
-      <main className="room-shell">
-        <p>Entrando na sala {roomId}...</p>
-      </main>
-    );
+    return <RoomPage roomId={roomId} />;
   }
 
   return (
