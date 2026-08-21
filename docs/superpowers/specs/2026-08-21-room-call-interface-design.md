@@ -12,6 +12,7 @@ Refinar a tela da sala para ficar mais próxima de uma call minimalista estilo D
 - Adicionar controle de desconectar da call.
 - Adicionar controle para parar compartilhamento de tela local.
 - Adicionar controle para colocar compartilhamento de tela em tela cheia.
+- Trocar os botões textuais da call por botões compactos com ícones SVG.
 - Reduzir largura, padding e peso visual do chat.
 - Reorganizar mídia para ter um destaque principal e tiles menores de participantes.
 - Manter a arquitetura atual em React, sem alterar backend ou protocolo WebSocket.
@@ -72,13 +73,16 @@ Para tela cheia, será usado `requestFullscreen()` no elemento de vídeo do comp
 
 ### `MediaControls`
 
-Os controles ficam mais compactos e explícitos:
+Os controles ficam mais compactos e usam apenas ícones SVG visíveis:
 
-- microfone: `Mutar` quando ligado e `Desmutar` quando desligado;
-- câmera: `Desligar câmera` ou `Ligar câmera`;
-- tela: `Compartilhar tela`;
-- parar tela: visível quando houver compartilhamento local ativo;
-- desconectar: botão vermelho.
+- microfone: ícone de microfone quando ligado e microfone cortado quando mutado;
+- câmera: ícone de câmera quando ligada e câmera cortada quando desligada;
+- tela: ícone de monitor para iniciar compartilhamento;
+- parar tela: ícone de monitor com ação de parar, visível quando houver compartilhamento local ativo;
+- tela cheia: ícone de expandir, disponível para o compartilhamento em destaque;
+- desconectar: ícone de telefone desligado em botão vermelho.
+
+Os botões não terão texto visível. Cada botão terá `aria-label` descritivo para acessibilidade e `title` para tooltip nativo do navegador. Como o projeto ainda não usa biblioteca de ícones, os ícones serão SVGs inline pequenos e reaproveitáveis no próprio frontend.
 
 O botão de parar tela encerra todos os compartilhamentos locais ativos para manter a primeira versão simples e previsível.
 
