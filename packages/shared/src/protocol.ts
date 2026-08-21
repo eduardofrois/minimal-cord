@@ -6,6 +6,7 @@ export type ClientMessage =
   | { type: 'room:leave' }
   | { type: 'chat:send'; text: string }
   | { type: 'media:get-router-rtp-capabilities' }
+  | { type: 'media:get-producers' }
   | { type: 'media:create-transport'; direction: 'send' | 'recv' }
   | { type: 'media:connect-transport'; transportId: string; dtlsParameters: unknown }
   | { type: 'media:produce'; transportId: string; kind: 'audio' | 'video'; rtpParameters: unknown; source: 'mic' | 'camera' | 'screen' }
@@ -26,6 +27,7 @@ export type ServerMessage =
   | { type: 'media:produced'; producer: PublishedTrack }
   | { type: 'media:producer-closed'; producerId: string; participantId: string }
   | { type: 'media:new-producer'; producer: PublishedTrack }
+  | { type: 'media:producers'; producers: PublishedTrack[] }
   | { type: 'media:consumer-created'; consumerOptions: unknown }
   | { type: 'error'; code: string; message: string };
 
@@ -47,6 +49,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       return hasNonEmptyString(value, 'roomId') && hasNonEmptyString(value, 'displayName');
     case 'room:leave':
     case 'media:get-router-rtp-capabilities':
+    case 'media:get-producers':
       return true;
     case 'chat:send':
       return hasNonEmptyString(value, 'text');

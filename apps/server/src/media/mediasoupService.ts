@@ -129,6 +129,7 @@ export interface RoomMediaController {
     producerId: string,
     rtpCapabilities: unknown
   ): Promise<{ id: string; producerId: string; kind: MediaKind; rtpParameters: unknown } | undefined>;
+  listProducers(roomId: RoomId, excludeParticipantId?: string): PublishedTrack[];
   closeProducer(roomId: RoomId, participantId: string, producerId: string): Promise<PublishedTrack | undefined>;
   closeParticipant(roomId: RoomId, participantId: string): Promise<PublishedTrack[]>;
   closeRoom(roomId: RoomId): Promise<void>;
@@ -333,6 +334,15 @@ export class MediasoupService implements RoomMediaController {
       kind: consumer.kind,
       rtpParameters: consumer.rtpParameters
     };
+  }
+
+  listProducers(roomId: RoomId, excludeParticipantId?: string): PublishedTrack[] {
+    const room = this.rooms.get(roomId);
+    if (!room) return [];
+
+    return [...room.producers.values()]
+      .filter((record) => record.participantId !== excludeParticipantId)
+      .map(toPublishedTrack);
   }
 
   async closeProducer(roomId: RoomId, participantId: string, producerId: string): Promise<PublishedTrack | undefined> {

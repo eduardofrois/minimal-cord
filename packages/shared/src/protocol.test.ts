@@ -10,6 +10,7 @@ describe('shared protocol', () => {
     expect(isClientMessage({ type: 'room:create', displayName: 'Ana' })).toBe(true);
     expect(isClientMessage({ type: 'chat:send', text: 'oi' })).toBe(true);
     expect(isClientMessage({ type: 'media:consume', transportId: 't1', producerId: 'p1', rtpCapabilities: {} })).toBe(true);
+    expect(isClientMessage({ type: 'media:get-producers' })).toBe(true);
   });
 
   it('rejects invalid client messages', () => {

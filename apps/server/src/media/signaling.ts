@@ -52,6 +52,10 @@ export async function handleMediaSignal(message: ClientMessage, context: Signali
       context.send({ type: 'media:router-rtp-capabilities', rtpCapabilities });
       return true;
     }
+    case 'media:get-producers': {
+      context.send({ type: 'media:producers', producers: context.media.listProducers(context.roomId, context.participantId) });
+      return true;
+    }
     case 'media:create-transport': {
       const transport = await context.media.createTransport(context.roomId, context.participantId, message.direction);
       if (!transport) return false;
