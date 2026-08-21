@@ -34,6 +34,19 @@ describe('useRoomConnection', () => {
     expect(socket.send).toHaveBeenCalledWith({ type: 'room:join', roomId: 'room1', displayName: 'Ana' });
   });
 
+  it('creates a room when no room id is given and adopts the returned link', () => {
+    const socket = createConnectStub();
+
+    const { result } = renderHook(() => useRoomConnection({ displayName: 'Ana', connect: socket.connect }));
+
+    expect(socket.send).toHaveBeenCalledWith({ type: 'room:create', displayName: 'Ana' });
+
+    socket.emit({ type: 'room:created', roomId: 'abc123' });
+
+    expect(result.current.roomId).toBe('abc123');
+    expect(window.location.pathname).toBe('/r/abc123');
+  });
+
   it('adds chat messages received from the socket', () => {
     const socket = createConnectStub();
 

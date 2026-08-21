@@ -10,7 +10,8 @@ import { readDisplayName } from '../lib/nameStorage';
 import { buildRoomPath } from '../lib/roomLink';
 
 type RoomPageProps = {
-  roomId: string;
+  /** Sem valor, a página cria uma sala nova e adota o id devolvido. */
+  roomId?: string;
 };
 
 export function RoomPage({ roomId }: RoomPageProps) {
@@ -51,7 +52,7 @@ export function RoomPage({ roomId }: RoomPageProps) {
     );
   }
 
-  const roomUrl = `${window.location.origin}${buildRoomPath(roomId)}`;
+  const roomUrl = room.roomId ? `${window.location.origin}${buildRoomPath(room.roomId)}` : undefined;
   const mediaError = localMedia.error ?? roomMedia.error;
 
   return (
@@ -59,10 +60,10 @@ export function RoomPage({ roomId }: RoomPageProps) {
       <section className="stage">
         <header className="stage-header">
           <div>
-            <h1>Sala {roomId}</h1>
+            <h1>{room.roomId ? `Sala ${room.roomId}` : 'Criando sala...'}</h1>
             <p>{room.participantId ? (roomMedia.ready ? 'Conectado' : 'Preparando mídia...') : 'Entrando...'}</p>
           </div>
-          <button type="button" onClick={() => void navigator.clipboard?.writeText(roomUrl)}>
+          <button type="button" disabled={!roomUrl} onClick={() => roomUrl && void navigator.clipboard?.writeText(roomUrl)}>
             Copiar link
           </button>
         </header>

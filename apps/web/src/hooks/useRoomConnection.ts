@@ -1,9 +1,11 @@
 import type { ChatMessage, Participant, ServerMessage } from '@minimal-cord/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { buildRoomPath } from '../lib/roomLink';
 import { buildRoomSocketUrl, connectRoomSocket, type ConnectRoomSocket, type RoomSocket } from '../lib/wsClient';
 
 type UseRoomConnectionOptions = {
-  roomId: string;
+  /** Sala a entrar. Sem valor, a conexão cria uma sala nova. */
+  roomId?: string;
   displayName: string;
   connect?: ConnectRoomSocket;
 };
@@ -11,6 +13,7 @@ type UseRoomConnectionOptions = {
 export type ServerMessageListener = (message: ServerMessage) => void;
 
 export type RoomConnectionState = {
+  roomId?: string;
   participantId?: string;
   participants: Participant[];
   chatMessages: ChatMessage[];
@@ -22,6 +25,7 @@ export type RoomConnectionState = {
 };
 
 export function useRoomConnection({ roomId, displayName, connect = connectRoomSocket }: UseRoomConnectionOptions): RoomConnectionState {
+  const [currentRoomId, setCurrentRoomId] = useState(roomId);
   const [participantId, setParticipantId] = useState<string>();
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -37,7 +41,14 @@ export function useRoomConnection({ roomId, displayName, connect = connectRoomSo
       for (const listener of listenersRef.current) listener(message);
 
       switch (message.type) {
+        case 'room:created':
+          // A sala só existe enquanto o criador estiver conectado, então a mesma
+          // conexão vira a sessão da sala em vez de reabrir a página.
+          setCurrentRoomId(message.roomId);
+          window.history.pushState(null, '', buildRoomPath(message.roomId));
+          return;
         case 'room:joined':
+          setCurrentRoomId(message.roomId);
           setParticipantId(message.participantId);
           setParticipants(message.participants);
           setChatMessages(message.chatMessages);
@@ -70,7 +81,7 @@ export function useRoomConnection({ roomId, displayName, connect = connectRoomSo
     const nextSocket = connect(wsUrl, handleMessage);
     socketRef.current = nextSocket;
     setSocket(nextSocket);
-    nextSocket.send({ type: 'room:join', roomId, displayName });
+    nextSocket.send(roomId ? { type: 'room:join', roomId, displayName } : { type: 'room:create', displayName });
 
     return () => {
       socketRef.current = undefined;
@@ -93,5 +104,5 @@ export function useRoomConnection({ roomId, displayName, connect = connectRoomSo
     socketRef.current?.send({ type: 'chat:send', text });
   }, []);
 
-  return { participantId, participants, chatMessages, error, socket, sendChat, subscribe };
+  return { roomId: currentRoomId, participantId, participants, chatMessages, error, socket, sendChat, subscribe };
 }
