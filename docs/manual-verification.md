@@ -47,3 +47,29 @@ remove empty rooms immediately.
 - [ ] Confirm `/ws` connects over WSS (browser devtools, Network → WS).
 - [ ] Open a room link directly in a new tab and confirm the SPA fallback serves it.
 - [ ] Confirm at least two clients on different networks can join and exchange audio.
+
+## Verification run — 2026-08-21
+
+Environment: Windows 11, Node 24.19.0, pnpm 9.15.9, `pnpm dev`, two tabs of the
+same Chromium instance. Microphone, camera, and screen capture were replaced by
+synthetic tracks (`canvas.captureStream()` and an `AudioContext` oscillator) so
+the WebRTC path could be exercised without physical devices.
+
+- Automated checks (`pnpm typecheck`, `pnpm test`, `pnpm build`): PASS — 35 tests.
+- Create room and adopt the `/r/<roomId>` link: PASS
+- Second client joins by link, both listed as participants: PASS
+- Temporary chat in both directions: PASS
+- Audio produce/consume in both directions: PASS — remote `<audio>` playing a live track.
+- Optional camera: PASS — remote tile decoded at 320x180; turning the camera off removed the tile in the other client.
+- Multiple simultaneous screen shares: PASS — two screen tiles from the same participant, decoded at the same time.
+- Late joiner receives media already in progress: PASS — a client entering an active room consumed the camera and both screens.
+- Empty room cleanup: PASS — reopening the link after every client left returns "sala não encontrada".
+- Unknown room id: PASS — "sala não encontrada".
+- Server log clean (no warn/error entries) during the whole run: PASS
+
+Not covered by this run, still required before calling the MVP done:
+
+- [ ] Real microphone and camera devices, including the permission-denied errors.
+- [ ] Two clients on different machines and different networks.
+- [ ] HTTPS/WSS production smoke test behind the reverse proxy, including the SPA fallback on room links.
+- [ ] Behavior on restrictive NAT, which is what decides whether TURN is needed.
