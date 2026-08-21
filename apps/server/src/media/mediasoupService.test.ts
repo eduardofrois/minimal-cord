@@ -158,6 +158,21 @@ describe('MediasoupService media cleanup', () => {
     expect(await service.closeProducer(roomId, 'alice', producer!.producerId)).toMatchObject(producer!);
   });
 
+  it('lists room producers except the requesting participant', async () => {
+    const { service } = createFakeService();
+    await service.start();
+
+    const roomId = 'room-1';
+    const aliceTransport = await service.createTransport(roomId, 'alice', 'send');
+    const bobTransport = await service.createTransport(roomId, 'bob', 'send');
+    const aliceProducer = await service.produce(roomId, aliceTransport!.id, 'alice', 'audio', {}, 'mic');
+    await service.produce(roomId, bobTransport!.id, 'bob', 'video', {}, 'screen');
+
+    expect(service.listProducers(roomId, 'bob')).toEqual([aliceProducer]);
+    expect(service.listProducers(roomId)).toHaveLength(2);
+    expect(service.listProducers('missing-room')).toEqual([]);
+  });
+
   it('rejects connecting another participant transport', async () => {
     const { service } = createFakeService();
     await service.start();

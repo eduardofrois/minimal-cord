@@ -8,6 +8,8 @@ type UseRoomConnectionOptions = {
   connect?: ConnectRoomSocket;
 };
 
+export type ServerMessageListener = (message: ServerMessage) => void;
+
 export type RoomConnectionState = {
   participantId?: string;
   participants: Participant[];
@@ -15,6 +17,8 @@ export type RoomConnectionState = {
   error?: string;
   socket?: RoomSocket;
   sendChat(text: string): void;
+  /** Registers a listener for every server message. Returns the unsubscribe. */
+  subscribe(listener: ServerMessageListener): () => void;
 };
 
 export function useRoomConnection({ roomId, displayName, connect = connectRoomSocket }: UseRoomConnectionOptions): RoomConnectionState {
@@ -24,11 +28,14 @@ export function useRoomConnection({ roomId, displayName, connect = connectRoomSo
   const [error, setError] = useState<string>();
   const [socket, setSocket] = useState<RoomSocket>();
   const socketRef = useRef<RoomSocket>();
+  const listenersRef = useRef(new Set<ServerMessageListener>());
 
   const wsUrl = useMemo(() => buildRoomSocketUrl(window.location), []);
 
   useEffect(() => {
     function handleMessage(message: ServerMessage) {
+      for (const listener of listenersRef.current) listener(message);
+
       switch (message.type) {
         case 'room:joined':
           setParticipantId(message.participantId);
@@ -75,9 +82,16 @@ export function useRoomConnection({ roomId, displayName, connect = connectRoomSo
     };
   }, [connect, displayName, roomId, wsUrl]);
 
+  const subscribe = useCallback((listener: ServerMessageListener) => {
+    listenersRef.current.add(listener);
+    return () => {
+      listenersRef.current.delete(listener);
+    };
+  }, []);
+
   const sendChat = useCallback((text: string) => {
     socketRef.current?.send({ type: 'chat:send', text });
   }, []);
 
-  return { participantId, participants, chatMessages, error, socket, sendChat };
+  return { participantId, participants, chatMessages, error, socket, sendChat, subscribe };
 }

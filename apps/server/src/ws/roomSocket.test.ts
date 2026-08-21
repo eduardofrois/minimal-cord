@@ -26,6 +26,7 @@ async function startTestServer() {
     connectTransport: async () => false,
     produce: async () => undefined,
     consume: async () => undefined,
+    listProducers: () => [],
     closeProducer: async () => undefined,
     closeParticipant: async () => [],
     closeRoom: async () => {}
@@ -176,6 +177,7 @@ describe('room WebSocket', () => {
       connectTransport: async () => false,
       produce: async () => undefined,
       consume: async () => undefined,
+      listProducers: () => [],
       closeProducer: async () => undefined,
       closeParticipant: async (roomId, participantId) => {
         closeParticipantCalls.push({ roomId, participantId });
